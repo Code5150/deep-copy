@@ -2,6 +2,8 @@ import java.io.ObjectInputStream
 
 data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?)
 data class Man2(private var name: String?, private var age: Float, private var favouriteBooks: List<String>?)
+data class Man3(private var name: String?, private var age: Int,
+                private var favouriteBooks: List<String>?, private var anotherMan: Man?)
 
 data class TreeInfo(val fieldId: String, val isArrayOrCollection: Boolean = false, val isCycle: Boolean = false)
 data class Tree(val nodeId: String,
@@ -28,7 +30,7 @@ data class Tree(val nodeId: String,
 //val stopList = mutableListOf("java.", "kotlin.")
 
 fun main(args: Array<String>) {
-    val newMan = deepCopy(Man("Vladislav", 22, listOf("Pedagogicheskaya poema")))
+    val newMan = deepCopy(Man3("Vladislav", 22, listOf("Kak zakalyalas stal"), Man("Vladislav", 22, listOf("Pedagogicheskaya poema"))))
     println("Hello World!")
 }
 
@@ -102,9 +104,9 @@ fun createFieldGraph(obj: Any, fieldValues: HashMap<Any, String>, nodeId: String
                     )
                 )
                 fieldValues[field.get(obj)] = (currentNode.nodeId) + "." + field.name
-            } else if (field.type.isAssignableFrom(Any::class.java)) {
+            } else /*if (field.type.isAssignableFrom(Any::class.java))*/ {
                 currentNode.addChild(
-                    TreeInfo(field.name, true),
+                    TreeInfo(field.name, false),
                     createFieldGraph(
                         field.get(obj), fieldValues,
                         (currentNode.nodeId) + "." + field.name, currentNode, rootNode ?: currentNode
@@ -140,7 +142,7 @@ fun createGraphForArrayOrCollectionElement(el: Any, fieldValues: HashMap<Any, St
 fun assignCycleReferences(rootNode: Tree, fieldValues: HashMap<Any, String>) {
 
 }
-
+/*Should return list of constructor args*/
 fun cloneValues(obj: Any?, fieldValues: HashMap<Any, String>, nodeId: String): Any? {
     if(obj != null) {
         if (obj::class.java.isPrimitive
@@ -190,6 +192,18 @@ fun cloneValues(obj: Any?, fieldValues: HashMap<Any, String>, nodeId: String): A
                                 else -> null
                             }
                             field.set(obj, resultCollection)
+                        }
+                    }
+                } else /*if (field.type.isAssignableFrom(Any::class.java))*/ {
+                    for (i in fieldValues) {
+                        if (i.value == fieldId) {
+                            val keyConstructor = i.key::class.java.declaredConstructors[0]
+                            val clonedKey = keyConstructor.newInstance(*keyConstructor.parameterTypes.map { when(it.isPrimitive) {
+                                true -> 0
+                                else -> it.cast(null)
+                            }}.toTypedArray())
+                            field.set(obj, cloneValues(clonedKey, fieldValues, fieldId))
+                            break
                         }
                     }
                 }
