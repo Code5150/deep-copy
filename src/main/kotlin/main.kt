@@ -1,5 +1,3 @@
-import java.io.ObjectInputStream
-
 data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?)
 data class Man2(private var name: String?, private var age: Float, private var favouriteBooks: List<String>?)
 data class Man3(private var name: String?, private var age: Int,
@@ -35,19 +33,20 @@ fun main(args: Array<String>) {
 }
 
 fun deepCopy(obj: Any): Any {
-    val fieldValues = HashMap<Any, String>()
+    val valuesToFields = HashMap<Any, String>()
+    val fieldsToValues = HashMap<String, Any>()
     val constructor = obj::class.java.declaredConstructors[0]
-    val fieldGraph = createFieldGraph(obj, fieldValues, "root")
-    assignCycleReferences(fieldGraph, fieldValues)
+    val fieldGraph = createFieldGraph(obj, valuesToFields, fieldsToValues, "root")
+    assignCycleReferences(fieldGraph, valuesToFields, fieldsToValues)
     var result = constructor.newInstance(*constructor.parameterTypes.map { when(it.isPrimitive) {
         true -> 0
         else -> it.cast(null)
     }}.toTypedArray())
-    result = cloneValues(result, fieldValues,"root")
+    result = cloneValues(result, valuesToFields, fieldsToValues,"root")
     return result
 }
 
-fun createFieldGraph(obj: Any, fieldValues: HashMap<Any, String>, nodeId: String, parentNode: Tree? = null, rootNode: Tree? = null): Tree {
+fun createFieldGraph(obj: Any, valuesToFields: HashMap<Any, String>, fieldsToValues: HashMap<String, Any>, nodeId: String, parentNode: Tree? = null, rootNode: Tree? = null): Tree {
     val parentId = when{
         nodeId.contains("Collection|") || nodeId.contains("Array|") -> ""
         else -> when(parentNode) {
@@ -60,8 +59,8 @@ fun createFieldGraph(obj: Any, fieldValues: HashMap<Any, String>, nodeId: String
         var elNumber = 0
         for (el in obj as Collection<*>) {
             el?.let {
-                createGraphForArrayOrCollectionElement(el, fieldValues, rootNode, currentNode, elNumber)
-                fieldValues[it] = "[$elNumber]" + currentNode.nodeId
+                createGraphForArrayOrCollectionElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, elNumber)
+                valuesToFields[it] = "[$elNumber]" + currentNode.nodeId
             }
             elNumber++
         }
@@ -69,8 +68,8 @@ fun createFieldGraph(obj: Any, fieldValues: HashMap<Any, String>, nodeId: String
         var elNumber = 0
         for (el in obj as Array<*>) {
             el?.let {
-                createGraphForArrayOrCollectionElement(el, fieldValues, rootNode, currentNode, elNumber)
-                fieldValues[it] = "[$elNumber]" + currentNode.nodeId
+                createGraphForArrayOrCollectionElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, elNumber)
+                valuesToFields[it] = "[$elNumber]" + currentNode.nodeId
             }
             elNumber++
         }
@@ -85,41 +84,41 @@ fun createFieldGraph(obj: Any, fieldValues: HashMap<Any, String>, nodeId: String
                 || field.type.isEnum
             ) {
                 currentNode.addChild(TreeInfo(field.name, false), null)
-                fieldValues[field.get(obj)] = (currentNode.nodeId) + "." + field.name
+                valuesToFields[field.get(obj)] = (currentNode.nodeId) + "." + field.name
             } else if (field.type.isArray) {
                 currentNode.addChild(
                     TreeInfo(field.name, true),
                     createFieldGraph(
-                        field.get(obj), fieldValues,
+                        field.get(obj), valuesToFields, fieldsToValues,
                         "Array|" + (currentNode.nodeId) + "." + field.name, currentNode, rootNode ?: currentNode
                     )
                 )
-                fieldValues[field.get(obj)] = (currentNode.nodeId) + "." + field.name
+                valuesToFields[field.get(obj)] = (currentNode.nodeId) + "." + field.name
             } else if (Collection::class.java.isAssignableFrom(field.type)) {
                 currentNode.addChild(
                     TreeInfo(field.name, true),
                     createFieldGraph(
-                        field.get(obj), fieldValues,
+                        field.get(obj), valuesToFields, fieldsToValues,
                         "Collection|" + (currentNode.nodeId) + "." + field.name, currentNode, rootNode ?: currentNode
                     )
                 )
-                fieldValues[field.get(obj)] = (currentNode.nodeId) + "." + field.name
+                valuesToFields[field.get(obj)] = (currentNode.nodeId) + "." + field.name
             } else /*if (field.type.isAssignableFrom(Any::class.java))*/ {
                 currentNode.addChild(
                     TreeInfo(field.name, false),
                     createFieldGraph(
-                        field.get(obj), fieldValues,
-                        (currentNode.nodeId) + "." + field.name, currentNode, rootNode ?: currentNode
+                        field.get(obj), valuesToFields, fieldsToValues,
+                        field.name, currentNode, rootNode ?: currentNode
                     )
                 )
-                fieldValues[field.get(obj)] = (currentNode.nodeId) + "." + field.name
+                valuesToFields[field.get(obj)] = (currentNode.nodeId) + "." + field.name
             }
         }
     }
     return currentNode
 }
 
-fun createGraphForArrayOrCollectionElement(el: Any, fieldValues: HashMap<Any, String>, rootNode: Tree?, currentNode: Tree, elNumber: Int) {
+fun createGraphForArrayOrCollectionElement(el: Any, valuesToFields: HashMap<Any, String>, fieldsToValues: HashMap<String, Any>, rootNode: Tree?, currentNode: Tree, elNumber: Int) {
     if (!(el::class.java.isPrimitive
         || el::class.java.isAssignableFrom(Number::class.java)
         || el::class.java.isAssignableFrom(Boolean::class.java)
@@ -132,18 +131,18 @@ fun createGraphForArrayOrCollectionElement(el: Any, fieldValues: HashMap<Any, St
                 el::class.java.isArray || Collection::class.java.isAssignableFrom(el::class.java)
             ),
             createFieldGraph(
-                el, fieldValues,
+                el, valuesToFields, fieldsToValues,
                 "[$elNumber]" + currentNode.nodeId, currentNode, rootNode ?: currentNode
             )
         )
     }
 }
 
-fun assignCycleReferences(rootNode: Tree, fieldValues: HashMap<Any, String>) {
+fun assignCycleReferences(rootNode: Tree, valuesToFields: HashMap<Any, String>, fieldsToValues: HashMap<String, Any>) {
 
 }
 /*Should return list of constructor args*/
-fun cloneValues(obj: Any?, fieldValues: HashMap<Any, String>, nodeId: String): Any? {
+fun cloneValues(obj: Any?, valuesToFields: HashMap<Any, String>, fieldsToValues: HashMap<String, Any>, nodeId: String): Any? {
     if(obj != null) {
         if (obj::class.java.isPrimitive
             || obj::class.java.isAssignableFrom(Number::class.java)
@@ -164,27 +163,29 @@ fun cloneValues(obj: Any?, fieldValues: HashMap<Any, String>, nodeId: String): A
                     || field.type.isAssignableFrom(Char::class.java)
                     || field.type.isEnum
                 ) {
-                    for (i in fieldValues) {
+                    for (i in valuesToFields) {
                         if (i.value == fieldId) {
                             field.set(obj, i.key)
                             break
                         }
                     }
                 } else if (field.type.isAssignableFrom(String::class.java)) {
-                    for (i in fieldValues) {
+                    for (i in valuesToFields) {
                         if (i.value == fieldId) {
                             field.set(obj, String((i.key as String).toCharArray()))
                             break
                         }
                     }
                 } else if (Collection::class.java.isAssignableFrom(field.type)) {
-                    for (i in fieldValues) {
+                    for (i in valuesToFields) {
                         if (i.value == fieldId) {
                             val resultCollection = when {
                                 field.type == List::class.java -> MutableList((i.key as Collection<*>).size) {
-                                    for (j in fieldValues) {
+                                    for (j in valuesToFields) {
                                         if (j.value == "[$it]Collection|$fieldId") {
-                                            return@MutableList cloneValues(j.key, fieldValues, "[$it]Collection|$fieldId")
+                                            return@MutableList cloneValues(
+                                                j.key, valuesToFields, fieldsToValues, "[$it]Collection|$fieldId"
+                                            )
                                         }
                                     }
                                     return@MutableList null
@@ -195,14 +196,14 @@ fun cloneValues(obj: Any?, fieldValues: HashMap<Any, String>, nodeId: String): A
                         }
                     }
                 } else /*if (field.type.isAssignableFrom(Any::class.java))*/ {
-                    for (i in fieldValues) {
+                    for (i in valuesToFields) {
                         if (i.value == fieldId) {
                             val keyConstructor = i.key::class.java.declaredConstructors[0]
                             val clonedKey = keyConstructor.newInstance(*keyConstructor.parameterTypes.map { when(it.isPrimitive) {
                                 true -> 0
                                 else -> it.cast(null)
                             }}.toTypedArray())
-                            field.set(obj, cloneValues(clonedKey, fieldValues, fieldId))
+                            field.set(obj, cloneValues(clonedKey, valuesToFields, fieldsToValues, fieldId))
                             break
                         }
                     }
