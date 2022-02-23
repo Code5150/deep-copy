@@ -21,8 +21,9 @@ data class Tree(val nodeId: String,
         return result
     }
 
-    public fun addChild(fieldId: TreeInfo, childNode: Tree?) {
+    public fun addChild(fieldId: TreeInfo, childNode: Tree?): Tree? {
         children[fieldId] = childNode
+        return childNode
     }
 
     public fun isCycleReference(fieldId: String): Tree? {
@@ -60,160 +61,203 @@ fun createBlankInstance(obj: Any): Any {
     return obj::class.java.cast(constructor.newInstance())
 }
 
-fun deepCopy(obj: Any): Any? {
+fun deepCopy(obj: Any?): Any? {
     var result: Any? = null
-    try {
-        val valuesToFields = mutableMapOf(obj to "root")
-        val fieldsToValues = mutableMapOf("root" to obj)
+    if (obj != null) {
+        try {
+            val valuesToFields = mutableMapOf(obj to "root")
+            val fieldsToValues = mutableMapOf("root" to obj)
 
-        val fieldGraph = createFieldGraph(obj, valuesToFields, fieldsToValues, "root")
+            val fieldGraph = createFieldGraph(obj, valuesToFields, fieldsToValues, "root")
+            if (fieldGraph != null) {
+                val res = createBlankInstance(obj)
+                val newObjFieldsToValues = mutableMapOf("root" to res)
 
-        val res = createBlankInstance(obj)
-        val newObjFieldsToValues = mutableMapOf("root" to res)
-
-        result = cloneValues(res, valuesToFields, fieldsToValues, newObjFieldsToValues, fieldGraph, fieldGraph)
-    } catch (t: Throwable) {
-        t.printStackTrace()
+                result = cloneValues(res, valuesToFields, fieldsToValues, newObjFieldsToValues, fieldGraph, fieldGraph)
+            }
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
     }
     return result
 }
 
 fun createFieldGraph(
-    obj: Any, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
+    obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
     nodeId: String, rootNode: Tree? = null
-): Tree {
+): Tree? {
     val currentNode = Tree(nodeId)
-    if (Collection::class.java.isAssignableFrom(obj::class.java)) {
-        (obj as Collection<*>).forEachIndexed{ index, any -> any?.let {
-            createGraphForArrayOrCollectionElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
-        }}
-    } else if (obj::class.java.isArray) {
-        (obj as Array<*>).forEachIndexed{ index, any -> any?.let {
-            createGraphForArrayOrCollectionElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
-        }}
-    } else {
-        for (field in obj::class.java.declaredFields) {
-            field.isAccessible = true
-            if (field.type.isPrimitive
-                || field.type.isAssignableFrom(Number::class.java)
-                || field.type.isAssignableFrom(Boolean::class.java)
-                || field.type.isAssignableFrom(Char::class.java)
-                || field.type.isEnum
-            ) { /*Check for cycle reference if string*/
-                val strId = (currentNode.nodeId) + "." + field.name
-                currentNode.addChild(TreeInfo(strId), Tree(strId))
-                valuesToFields[field.get(obj)] = strId
-                fieldsToValues[strId] = field.get(obj)
-            } else if (field.type.isAssignableFrom(String::class.java)) {
-                val strId = (currentNode.nodeId) + "." + field.name
-                if (valuesToFields[field.get(obj)] != null) {
-                    currentNode.addChild(
-                        TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
-                        rootNode?.getChild(valuesToFields[field.get(obj)]!!)
-                            ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
-                    )
-                } else {
+    if (obj != null) {
+        if (List::class.java.isAssignableFrom(obj::class.java)) {
+            (obj as List<*>).forEachIndexed { index, any -> any?.let {
+                createGraphForArrayOrListElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
+            }}
+        } else if (Set::class.java.isAssignableFrom(obj::class.java)) {
+            (obj as Set<*>).forEachIndexed { index, any -> any?.let {
+                createGraphForSetElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
+            }}
+        } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
+            (obj as Map<*, *>).forEach { (k, v) -> k?.let { v?.let {
+                createGraphForMapElement(k, v, valuesToFields, fieldsToValues, rootNode, currentNode)
+            }}}
+        } else if (obj::class.java.isArray) {
+            (obj as Array<*>).forEachIndexed { index, any -> any?.let {
+                createGraphForArrayOrListElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
+            }}
+        } else {
+            for (field in obj::class.java.declaredFields) {
+                field.isAccessible = true
+                if (field.type.isPrimitive
+                    || field.type.isAssignableFrom(Number::class.java)
+                    || field.type.isAssignableFrom(Boolean::class.java)
+                    || field.type.isAssignableFrom(Char::class.java)
+                    || field.type.isEnum
+                ) { /*Check for cycle reference if string*/
+                    val strId = (currentNode.nodeId) + "." + field.name
                     currentNode.addChild(TreeInfo(strId), Tree(strId))
                     valuesToFields[field.get(obj)] = strId
                     fieldsToValues[strId] = field.get(obj)
-                }
-            } else if (field.type.isArray) {
-                val strId = (currentNode.nodeId) + "." + field.name
-                if (valuesToFields[field.get(obj)] != null) {
-                    currentNode.addChild(
-                        TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
-                        rootNode?.getChild(valuesToFields[field.get(obj)]!!)
-                            ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
-                    )
-                } else {
-                    currentNode.addChild(
-                        TreeInfo(strId, true),
-                        createFieldGraph(
-                            field.get(obj), valuesToFields, fieldsToValues,
-                            strId, rootNode ?: currentNode
+                } else if (field.type.isAssignableFrom(String::class.java)) {
+                    val strId = (currentNode.nodeId) + "." + field.name
+                    if (valuesToFields[field.get(obj)] != null) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
+                            rootNode?.getChild(valuesToFields[field.get(obj)]!!)
+                                ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
                         )
-                    )
-                    valuesToFields[field.get(obj)] = strId
-                    fieldsToValues[strId] = field.get(obj)
-                }
-            } else if (Collection::class.java.isAssignableFrom(field.type)) {
-                val strId = (currentNode.nodeId) + "." + field.name
-                //check for cycle reference
-                if (valuesToFields[field.get(obj)] != null) {
-                    currentNode.addChild(
-                        TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
-                        rootNode?.getChild(valuesToFields[field.get(obj)]!!)
-                            ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
-                    )
-                } else {
-                    currentNode.addChild(
-                        TreeInfo(strId, isArrayOrCollection = true, isCycle = false),
-                        createFieldGraph(
-                            field.get(obj), valuesToFields, fieldsToValues,
-                            strId, rootNode ?: currentNode
+                    } else {
+                        currentNode.addChild(TreeInfo(strId), Tree(strId))
+                        valuesToFields[field.get(obj)] = strId
+                        fieldsToValues[strId] = field.get(obj)
+                    }
+                } else if (field.type.isArray) {
+                    val strId = (currentNode.nodeId) + "." + field.name
+                    if (valuesToFields[field.get(obj)] != null) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
+                            rootNode?.getChild(valuesToFields[field.get(obj)]!!)
+                                ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
                         )
-                    )
-                    valuesToFields[field.get(obj)] = strId
-                    fieldsToValues[strId] = field.get(obj)
-                }
-            } else {
-                val strId = (currentNode.nodeId) + "." + field.name
-                if (valuesToFields[field.get(obj)] != null) {
-                    currentNode.addChild(
-                        TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
-                        rootNode?.getChild(valuesToFields[field.get(obj)]!!)
-                            ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
-                    )
-                } else {
-                    currentNode.addChild(
-                        TreeInfo(strId, false),
-                        createFieldGraph(
-                            field.get(obj), valuesToFields, fieldsToValues,
-                            strId, rootNode ?: currentNode
+                    } else {
+                        currentNode.addChild(
+                            TreeInfo(strId, true),
+                            createFieldGraph(
+                                field.get(obj), valuesToFields, fieldsToValues,
+                                strId, rootNode ?: currentNode
+                            )
                         )
-                    )
-                    valuesToFields[field.get(obj)] = strId
-                    fieldsToValues[strId] = field.get(obj)
+                        valuesToFields[field.get(obj)] = strId
+                        fieldsToValues[strId] = field.get(obj)
+                    }
+                } else if (Collection::class.java.isAssignableFrom(field.type)) {
+                    val strId = (currentNode.nodeId) + "." + field.name
+                    //check for cycle reference
+                    if (valuesToFields[field.get(obj)] != null) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
+                            rootNode?.getChild(valuesToFields[field.get(obj)]!!)
+                                ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
+                        )
+                    } else {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = true, isCycle = false),
+                            createFieldGraph(
+                                field.get(obj), valuesToFields, fieldsToValues,
+                                strId, rootNode ?: currentNode
+                            )
+                        )
+                        valuesToFields[field.get(obj)] = strId
+                        fieldsToValues[strId] = field.get(obj)
+                    }
+                } else {
+                    val strId = (currentNode.nodeId) + "." + field.name
+                    if (valuesToFields[field.get(obj)] != null) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
+                            rootNode?.getChild(valuesToFields[field.get(obj)]!!)
+                                ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
+                        )
+                    } else {
+                        currentNode.addChild(
+                            TreeInfo(strId, false),
+                            createFieldGraph(
+                                field.get(obj), valuesToFields, fieldsToValues,
+                                strId, rootNode ?: currentNode
+                            )
+                        )
+                        valuesToFields[field.get(obj)] = strId
+                        fieldsToValues[strId] = field.get(obj)
+                    }
                 }
             }
         }
-    }
-    return currentNode
+        return currentNode
+    } else return null
 }
 
-fun createGraphForArrayOrCollectionElement(el: Any, valuesToFields: MutableMap<Any, String>,
-                                           fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
-                                           elNumber: Int) {
+fun createGraphForArrayOrListElement(el: Any, valuesToFields: MutableMap<Any, String>,
+                                     fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+                                     elNumber: Int) {
     val strId = currentNode.nodeId + "[$elNumber]"
-    if (el::class.java.isAssignableFrom(String::class.java)) {
+    createGraphForContainerElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, strId)
+    valuesToFields[el] = strId
+    fieldsToValues[strId] = el
+}
+
+fun createGraphForSetElement(el: Any, valuesToFields: MutableMap<Any, String>,
+                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+                             elNumber: Int) {
+    val strId = currentNode.nodeId + "[$elNumber]"
+    createGraphForContainerElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, strId)
+    valuesToFields[el] = strId
+    fieldsToValues[strId] = el
+}
+
+fun createGraphForMapElement(key: Any, value: Any, valuesToFields: MutableMap<Any, String>,
+                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree) {
+    val keyId = currentNode.nodeId + ".key"
+    val keyNode = createGraphForContainerElement(key, valuesToFields, fieldsToValues, rootNode, currentNode, keyId)!!
+    valuesToFields[key] = keyId
+    fieldsToValues[keyId] = key
+    val valueId = currentNode.nodeId + ".value"
+    createGraphForContainerElement(value, valuesToFields, fieldsToValues, rootNode, keyNode, valueId)
+    valuesToFields[value] = valueId
+    fieldsToValues[valueId] = value
+}
+
+fun createGraphForContainerElement(el: Any, valuesToFields: MutableMap<Any, String>,
+                                   fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+                                   strId: String): Tree? {
+    var result: Tree? = null
+    if (el::class.java.isPrimitive
+        || el::class.java.isAssignableFrom(Number::class.java)
+        || el::class.java.isAssignableFrom(Boolean::class.java)
+        || el::class.java.isAssignableFrom(Char::class.java)
+        || el::class.java.isEnum) {
+        result = currentNode.addChild(TreeInfo(strId), Tree(strId))
+    } else if (el::class.java.isAssignableFrom(String::class.java)) {
         if (valuesToFields[el] != null) {
-            currentNode.addChild(
+            result = currentNode.addChild(
                 TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
                 rootNode?.getChild(valuesToFields[el]!!)
                     ?: currentNode.getChild(valuesToFields[el]!!)
             )
         } else {
-            currentNode.addChild(TreeInfo(strId), Tree(strId))
+            result = currentNode.addChild(TreeInfo(strId), Tree(strId))
         }
-    } else if (!(el::class.java.isPrimitive
-                || el::class.java.isAssignableFrom(Number::class.java)
-                || el::class.java.isAssignableFrom(Boolean::class.java)
-                || el::class.java.isAssignableFrom(Char::class.java)
-                || el::class.java.isEnum)
-    ) {
-        currentNode.addChild(
+    } else {
+        result = currentNode.addChild(
             TreeInfo(
-                currentNode.nodeId + "[$elNumber]",
+                strId,
                 el::class.java.isArray || Collection::class.java.isAssignableFrom(el::class.java)
             ),
             createFieldGraph(
                 el, valuesToFields, fieldsToValues,
-                currentNode.nodeId + "[$elNumber]", rootNode ?: currentNode
+                strId, rootNode ?: currentNode
             )
         )
     }
-    valuesToFields[el] = strId
-    fieldsToValues[strId] = el
+    return result
 }
 
 /*Should return list of constructor args*/
