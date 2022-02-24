@@ -1,4 +1,5 @@
 import sun.reflect.ReflectionFactory
+import java.lang.reflect.Field
 
 data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?)
 data class Man2(private var name: String?, private var age: Float, private var favouriteBooks: List<String>?)
@@ -45,12 +46,18 @@ data class Tree(val nodeId: String,
 //val stopList = mutableListOf("java.", "kotlin.")
 
 fun main(args: Array<String>) {
-    val newMan = deepCopy(
+    /*val newMan = deepCopy(
         Man3("Vladislav", 22, listOf("Kak zakalyalas stal"),
             Man(
                 "Vladislav", 22, listOf("Pedagogicheskaya poema")
             )
-    ))
+    ))*/
+    val newMap = deepCopy(mapOf("alpha" to 0, "beta" to 1))
+    val newMap2 = deepCopy(mapOf("V" to Man(
+        "Vladislav", 22, listOf("Pedagogicheskaya poema")
+    ), "S" to Man(
+        "Sergey", 23, listOf("Kak zakalyalas stal")
+    )))
     println("Hello World!")
 }
 
@@ -82,13 +89,29 @@ fun deepCopy(obj: Any?): Any? {
     return result
 }
 
+fun isNumber(obj: Any) = obj::class.java.isAssignableFrom(Integer::class.java)
+        || obj::class.java.isAssignableFrom(Long::class.java)
+        || obj::class.java.isAssignableFrom(Short::class.java)
+        || obj::class.java.isAssignableFrom(Byte::class.java)
+        || obj::class.java.isAssignableFrom(Float::class.java)
+        || obj::class.java.isAssignableFrom(Double::class.java)
+
 fun createFieldGraph(
     obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
     nodeId: String, rootNode: Tree? = null
 ): Tree? {
     val currentNode = Tree(nodeId)
     if (obj != null) {
-        if (List::class.java.isAssignableFrom(obj::class.java)) {
+        if (obj::class.java.isPrimitive
+            || isNumber(obj)
+            || obj::class.java.isAssignableFrom(Boolean::class.java)
+            || obj::class.java.isAssignableFrom(Char::class.java)
+            || obj::class.java.isAssignableFrom(String::class.java)
+            || obj::class.java.isEnum
+        ) {
+            valuesToFields[obj] = nodeId
+            fieldsToValues[nodeId] = obj
+        } else if (List::class.java.isAssignableFrom(obj::class.java)) {
             (obj as List<*>).forEachIndexed { index, any -> any?.let {
                 createGraphForArrayOrListElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
             }}
@@ -97,8 +120,10 @@ fun createFieldGraph(
                 createGraphForSetElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
             }}
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
+            var mapIndex = 0
             (obj as Map<*, *>).forEach { (k, v) -> k?.let { v?.let {
-                createGraphForMapElement(k, v, valuesToFields, fieldsToValues, rootNode, currentNode)
+                createGraphForMapElement(k, v, valuesToFields, fieldsToValues, rootNode, currentNode, mapIndex)
+                mapIndex++
             }}}
         } else if (obj::class.java.isArray) {
             (obj as Array<*>).forEachIndexed { index, any -> any?.let {
@@ -108,7 +133,7 @@ fun createFieldGraph(
             for (field in obj::class.java.declaredFields) {
                 field.isAccessible = true
                 if (field.type.isPrimitive
-                    || field.type.isAssignableFrom(Number::class.java)
+                    || isNumber(obj)
                     || field.type.isAssignableFrom(Boolean::class.java)
                     || field.type.isAssignableFrom(Char::class.java)
                     || field.type.isEnum
@@ -214,13 +239,13 @@ fun createGraphForSetElement(el: Any, valuesToFields: MutableMap<Any, String>,
 }
 
 fun createGraphForMapElement(key: Any, value: Any, valuesToFields: MutableMap<Any, String>,
-                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree) {
-    val keyId = currentNode.nodeId + ".key"
-    val keyNode = createGraphForContainerElement(key, valuesToFields, fieldsToValues, rootNode, currentNode, keyId)!!
+                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree, mapIndex: Int) {
+    val keyId = currentNode.nodeId + "[$mapIndex].key"
+    createGraphForContainerElement(key, valuesToFields, fieldsToValues, rootNode, currentNode, keyId)
     valuesToFields[key] = keyId
     fieldsToValues[keyId] = key
-    val valueId = currentNode.nodeId + ".value"
-    createGraphForContainerElement(value, valuesToFields, fieldsToValues, rootNode, keyNode, valueId)
+    val valueId = currentNode.nodeId + "[$mapIndex].value"
+    createGraphForContainerElement(value, valuesToFields, fieldsToValues, rootNode, currentNode, valueId)
     valuesToFields[value] = valueId
     fieldsToValues[valueId] = value
 }
@@ -230,7 +255,7 @@ fun createGraphForContainerElement(el: Any, valuesToFields: MutableMap<Any, Stri
                                    strId: String): Tree? {
     var result: Tree? = null
     if (el::class.java.isPrimitive
-        || el::class.java.isAssignableFrom(Number::class.java)
+        || isNumber(el)
         || el::class.java.isAssignableFrom(Boolean::class.java)
         || el::class.java.isAssignableFrom(Char::class.java)
         || el::class.java.isEnum) {
@@ -260,13 +285,24 @@ fun createGraphForContainerElement(el: Any, valuesToFields: MutableMap<Any, Stri
     return result
 }
 
+fun matchType(obj: Any?) = when {
+    obj == null -> null
+    obj::class.java.isPrimitive -> obj
+    isNumber(obj)-> obj
+    obj::class.java.isAssignableFrom(Boolean::class.java)-> obj
+    obj::class.java.isAssignableFrom(Char::class.java)-> obj
+    obj::class.java.isAssignableFrom(String::class.java) -> obj
+    obj::class.java.isEnum -> obj
+    else -> createBlankInstance(obj)
+}
+
 /*Should return list of constructor args*/
 /*Rewrite it to search values in hashsets by graph*/
 fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
                 newObjFieldsToValues: MutableMap<String, Any>,rootNode: Tree, currentNode: Tree): Any? {
     if(obj != null) {
         if (obj::class.java.isPrimitive
-            || obj::class.java.isAssignableFrom(Number::class.java)
+            || isNumber(obj)
             || obj::class.java.isAssignableFrom(Boolean::class.java)
             || obj::class.java.isAssignableFrom(Char::class.java)
             || obj::class.java.isEnum
@@ -274,12 +310,15 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValu
             return obj
         } else if (obj::class.java.isAssignableFrom(String::class.java)) {
             return String((obj as String).toCharArray())
+        } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
+            return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
+                newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else {
             for (field in obj::class.java.declaredFields) {
                 field.isAccessible = true
                 var fieldId = currentNode.nodeId + "." + field.name
                 if (field.type.isPrimitive
-                    || field.type.isAssignableFrom(Number::class.java)
+                    || isNumber(obj)
                     || field.type.isAssignableFrom(Boolean::class.java)
                     || field.type.isAssignableFrom(Char::class.java)
                     || field.type.isEnum
@@ -302,28 +341,97 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValu
                         createStringClone(fieldId)
                     }
                 } else if (field.type.isArray) {
-
-                } else if (Collection::class.java.isAssignableFrom(field.type)) {
+                    val cycleRef = currentNode.isCycleReference(fieldId)
+                    val createArrayClone = {id: String ->
+                        val collectionValues = (fieldsToValues[id] as Array<*>).mapIndexed { index, any ->
+                            val myId = "$fieldId[$index]"
+                            val clone = matchType(any)
+                            return@mapIndexed cloneValues(
+                                clone, valuesToFields,
+                                fieldsToValues, newObjFieldsToValues,
+                                rootNode, currentNode.getChild(myId)!!
+                            )
+                        }
+                        newObjFieldsToValues[fieldId] = collectionValues
+                        field.set(obj, collectionValues)
+                    }
+                    if (cycleRef != null) {
+                        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+                            field.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+                        } else {
+                            createArrayClone(cycleRef.nodeId)
+                        }
+                    } else {
+                        createArrayClone(fieldId)
+                    }
+                } else if (List::class.java.isAssignableFrom(field.type)) {
                     val cycleRef = currentNode.isCycleReference(fieldId)
                     val createCollectionClone = {id: String ->
-                        val collectionValues = (fieldsToValues[id] as Collection<*>).mapIndexed { index, any ->
+                        val collectionValues = (fieldsToValues[id] as List<*>).mapIndexed { index, any ->
                                 val myId = "$fieldId[$index]"
-                                val clone = when {
-                                    any == null -> null
-                                    any::class.java.isPrimitive -> any
-                                    any::class.java.isAssignableFrom(Number::class.java)-> any
-                                    any::class.java.isAssignableFrom(Boolean::class.java)-> any
-                                    any::class.java.isAssignableFrom(Char::class.java)-> any
-                                    any::class.java.isAssignableFrom(String::class.java) -> any
-                                    any::class.java.isEnum -> any
-                                    else -> createBlankInstance(any)
-                                }
+                                val clone = matchType(any)
                                 return@mapIndexed cloneValues(
                                     clone, valuesToFields,
                                     fieldsToValues, newObjFieldsToValues,
                                     rootNode, currentNode.getChild(myId)!!
                                 )
                             }
+                        newObjFieldsToValues[fieldId] = collectionValues
+                        field.set(obj, collectionValues)
+                    }
+                    if (cycleRef != null) {
+                        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+                            field.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+                        } else {
+                            createCollectionClone(cycleRef.nodeId)
+                        }
+                    } else {
+                        createCollectionClone(fieldId)
+                    }
+                } else if (Set::class.java.isAssignableFrom(field.type)) {
+                    val cycleRef = currentNode.isCycleReference(fieldId)
+                    val createCollectionClone = {id: String ->
+                        val collectionValues = (fieldsToValues[id] as Set<*>).mapIndexed { index, any ->
+                            val myId = "$fieldId[$index]"
+                            val clone = matchType(any)
+                            return@mapIndexed cloneValues(
+                                clone, valuesToFields,
+                                fieldsToValues, newObjFieldsToValues,
+                                rootNode, currentNode.getChild(myId)!!
+                            )
+                        }
+                        newObjFieldsToValues[fieldId] = collectionValues
+                        field.set(obj, collectionValues)
+                    }
+                    if (cycleRef != null) {
+                        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+                            field.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+                        } else {
+                            createCollectionClone(cycleRef.nodeId)
+                        }
+                    } else {
+                        createCollectionClone(fieldId)
+                    }
+                } else if (Map::class.java.isAssignableFrom(field.type)) {
+                    val cycleRef = currentNode.isCycleReference(fieldId)
+                    val createCollectionClone = {id: String ->
+                        var index = 0
+                        val collectionValues = (fieldsToValues[id] as Map<*, *>).map { (k, v) ->
+                            val keyId = "$fieldId[$index].key"
+                            val valueId = "$fieldId[$index].value"
+
+                            val keyClone = cloneValues(matchType(k), valuesToFields,
+                                fieldsToValues, newObjFieldsToValues,
+                                rootNode, currentNode.getChild(keyId)!!
+                            )
+                            
+                            val valueClone = cloneValues(matchType(v), valuesToFields,
+                                fieldsToValues, newObjFieldsToValues,
+                                rootNode, currentNode.getChild(valueId)!!
+                            )
+                            index++
+                            return@map keyClone to valueClone
+                        }.toMap()
                         newObjFieldsToValues[fieldId] = collectionValues
                         field.set(obj, collectionValues)
                     }
@@ -364,4 +472,43 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValu
         }
     }
     return obj
+}
+
+fun cloneMap(obj: Any, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
+             newObjFieldsToValues: MutableMap<String, Any>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): Map<*, *>? {
+    val cycleRef = currentNode.isCycleReference(fieldId)
+    var item: Map<*, *>? = null
+    val createCollectionClone = {id: String ->
+        var index = 0
+        val collectionValues = (fieldsToValues[id] as Map<*, *>).map { (k, v) ->
+            val keyId = "$fieldId[$index].key"
+            val valueId = "$fieldId[$index].value"
+
+            val keyClone = cloneValues(matchType(k), valuesToFields,
+                fieldsToValues, newObjFieldsToValues,
+                rootNode, currentNode.getChild(keyId)!!
+            )
+
+            val valueClone = cloneValues(matchType(v), valuesToFields,
+                fieldsToValues, newObjFieldsToValues,
+                rootNode, currentNode.getChild(valueId)!!
+            )
+            index++
+            return@map keyClone to valueClone
+        }.toMap()
+        newObjFieldsToValues[fieldId] = collectionValues
+        field?.let {it.set(obj, collectionValues)}
+        item = collectionValues
+    }
+    if (cycleRef != null) {
+        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+            field?.let {it.set(obj, newObjFieldsToValues[cycleRef.nodeId])}
+            item = newObjFieldsToValues[cycleRef.nodeId] as Map<*, *>?
+        } else {
+            createCollectionClone(cycleRef.nodeId)
+        }
+    } else {
+        createCollectionClone(fieldId)
+    }
+    return item
 }
