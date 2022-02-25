@@ -9,7 +9,7 @@ data class Man3(private var name: String?, private var age: Int,
 data class TreeInfo(val fieldId: String, val isArrayOrCollection: Boolean = false, val isCycle: Boolean = false)
 data class Tree(val nodeId: String,
                 val children: HashMap<TreeInfo, Tree?> = HashMap()) {
-    public fun getChild(childId: String): Tree? {
+    fun getChild(childId: String): Tree? {
         var result: Tree? = null
         if (childId == nodeId) {
             result = this
@@ -22,12 +22,12 @@ data class Tree(val nodeId: String,
         return result
     }
 
-    public fun addChild(fieldId: TreeInfo, childNode: Tree?): Tree? {
+    fun addChild(fieldId: TreeInfo, childNode: Tree?): Tree? {
         children[fieldId] = childNode
         return childNode
     }
 
-    public fun isCycleReference(fieldId: String): Tree? {
+    fun isCycleReference(fieldId: String): Tree? {
         for ((k, v) in children) {
             if (fieldId == k.fieldId) {
                 return if (k.isCycle) {
@@ -52,7 +52,7 @@ fun main(args: Array<String>) {
                 "Vladislav", 22, listOf("Pedagogicheskaya poema")
             )
     ))*/
-    val newMap = deepCopy(mapOf("alpha" to 0, "beta" to 1))
+    val newMap = deepCopy(mapOf("alpha" to 9687, "beta" to 789))
     val newMap2 = deepCopy(mapOf("V" to Man(
         "Vladislav", 22, listOf("Pedagogicheskaya poema")
     ), "S" to Man(
@@ -296,18 +296,35 @@ fun matchType(obj: Any?) = when {
     else -> createBlankInstance(obj)
 }
 
+fun clonePrimitiveWrapper(pr: Any): Any = when (pr) {
+    is Boolean -> pr.toString().toBoolean()
+    is Char -> pr.toString().toCharArray()[0]
+    is Int -> pr.toString().toInt()
+    is Long -> pr.toString().toLong()
+    is Byte -> pr.toString().toByte()
+    is Short -> pr.toString().toShort()
+    is Float -> pr.toString().toFloat()
+    is Double -> pr.toString().toDouble()
+    is UInt -> pr.toString().toUInt()
+    is ULong -> pr.toString().toULong()
+    is UByte -> pr.toString().toUByte()
+    is UShort -> pr.toString().toUShort()
+    else -> pr.toString()
+}
+
 /*Should return list of constructor args*/
 /*Rewrite it to search values in hashsets by graph*/
 fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
                 newObjFieldsToValues: MutableMap<String, Any>,rootNode: Tree, currentNode: Tree): Any? {
     if(obj != null) {
         if (obj::class.java.isPrimitive
-            || isNumber(obj)
-            || obj::class.java.isAssignableFrom(Boolean::class.java)
-            || obj::class.java.isAssignableFrom(Char::class.java)
             || obj::class.java.isEnum
         ) {
             return obj
+        } else if (isNumber(obj)
+            || obj::class.java.isAssignableFrom(Boolean::class.java)
+            || obj::class.java.isAssignableFrom(Char::class.java)) {
+            return clonePrimitiveWrapper(obj)
         } else if (obj::class.java.isAssignableFrom(String::class.java)) {
             return String((obj as String).toCharArray())
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
