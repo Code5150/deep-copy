@@ -1,7 +1,11 @@
 import sun.reflect.ReflectionFactory
 import java.lang.reflect.Field
 
-data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?)
+data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?) {
+    override fun toString(): String {
+        return name + age
+    }
+}
 data class Man2(private var name: String?, private var age: Float, private var favouriteBooks: List<String>?)
 data class Man3(private var name: String?, private var age: Int,
                 private var favouriteBooks: List<String>?, private var anotherMan: Man?)
@@ -52,10 +56,11 @@ fun main(args: Array<String>) {
                 "Vladislav", 22, listOf("Pedagogicheskaya poema")
             )
     ))*/
-    val newMap = deepCopy(mapOf("alpha" to 9687, "beta" to 789))
-    val newMap2 = deepCopy(mapOf("V" to Man(
+    val man1 = Man(
         "Vladislav", 22, listOf("Pedagogicheskaya poema")
-    ), "S" to Man(
+    )
+    val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
+    val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
     )))
     println("Hello World!")
@@ -72,13 +77,14 @@ fun deepCopy(obj: Any?): Any? {
     var result: Any? = null
     if (obj != null) {
         try {
-            val valuesToFields = mutableMapOf(obj to "root")
-            val fieldsToValues = mutableMapOf("root" to obj)
+            /*Need to test with set, array and self reference*/
+            val valuesToFields: MutableMap<Any?, String> = mutableMapOf(obj to "root")
+            val fieldsToValues: MutableMap<String, Any?> = mutableMapOf("root" to obj)
 
             val fieldGraph = createFieldGraph(obj, valuesToFields, fieldsToValues, "root")
             if (fieldGraph != null) {
                 val res = createBlankInstance(obj)
-                val newObjFieldsToValues = mutableMapOf("root" to res)
+                val newObjFieldsToValues: MutableMap<String, Any?> = mutableMapOf("root" to res)
 
                 result = cloneValues(res, valuesToFields, fieldsToValues, newObjFieldsToValues, fieldGraph, fieldGraph)
             }
@@ -90,6 +96,12 @@ fun deepCopy(obj: Any?): Any? {
 }
 
 fun isNumber(obj: Any) = obj::class.java.isAssignableFrom(Integer::class.java)
+        || obj::class.java.isAssignableFrom(java.lang.Long::class.java)
+        || obj::class.java.isAssignableFrom(java.lang.Short::class.java)
+        || obj::class.java.isAssignableFrom(java.lang.Byte::class.java)
+        || obj::class.java.isAssignableFrom(java.lang.Float::class.java)
+        || obj::class.java.isAssignableFrom(java.lang.Double::class.java)
+        || obj::class.java.isAssignableFrom(Int::class.java)
         || obj::class.java.isAssignableFrom(Long::class.java)
         || obj::class.java.isAssignableFrom(Short::class.java)
         || obj::class.java.isAssignableFrom(Byte::class.java)
@@ -97,7 +109,7 @@ fun isNumber(obj: Any) = obj::class.java.isAssignableFrom(Integer::class.java)
         || obj::class.java.isAssignableFrom(Double::class.java)
 
 fun createFieldGraph(
-    obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
+    obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
     nodeId: String, rootNode: Tree? = null
 ): Tree? {
     val currentNode = Tree(nodeId)
@@ -105,7 +117,9 @@ fun createFieldGraph(
         if (obj::class.java.isPrimitive
             || isNumber(obj)
             || obj::class.java.isAssignableFrom(Boolean::class.java)
+            || obj::class.java.isAssignableFrom(java.lang.Boolean::class.java)
             || obj::class.java.isAssignableFrom(Char::class.java)
+            || obj::class.java.isAssignableFrom(Character::class.java)
             || obj::class.java.isAssignableFrom(String::class.java)
             || obj::class.java.isEnum
         ) {
@@ -116,19 +130,19 @@ fun createFieldGraph(
                 createGraphForArrayOrListElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
             }}
         } else if (Set::class.java.isAssignableFrom(obj::class.java)) {
-            (obj as Set<*>).forEachIndexed { index, any -> any?.let {
-                createGraphForSetElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
-            }}
+            (obj as Set<*>).forEachIndexed { index, any ->
+                createGraphForSetElement(any, valuesToFields, fieldsToValues, rootNode, currentNode, index)
+            }
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
             var mapIndex = 0
-            (obj as Map<*, *>).forEach { (k, v) -> k?.let { v?.let {
+            (obj as Map<*, *>).forEach { (k, v) ->
                 createGraphForMapElement(k, v, valuesToFields, fieldsToValues, rootNode, currentNode, mapIndex)
                 mapIndex++
-            }}}
+            }
         } else if (obj::class.java.isArray) {
-            (obj as Array<*>).forEachIndexed { index, any -> any?.let {
-                createGraphForArrayOrListElement(it, valuesToFields, fieldsToValues, rootNode, currentNode, index)
-            }}
+            (obj as Array<*>).forEachIndexed { index, any ->
+                createGraphForArrayOrListElement(any, valuesToFields, fieldsToValues, rootNode, currentNode, index)
+            }
         } else {
             for (field in obj::class.java.declaredFields) {
                 field.isAccessible = true
@@ -220,8 +234,8 @@ fun createFieldGraph(
     } else return null
 }
 
-fun createGraphForArrayOrListElement(el: Any, valuesToFields: MutableMap<Any, String>,
-                                     fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+fun createGraphForArrayOrListElement(el: Any?, valuesToFields: MutableMap<Any?, String>,
+                                     fieldsToValues: MutableMap<String, Any?>, rootNode: Tree?, currentNode: Tree,
                                      elNumber: Int) {
     val strId = currentNode.nodeId + "[$elNumber]"
     createGraphForContainerElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, strId)
@@ -229,8 +243,8 @@ fun createGraphForArrayOrListElement(el: Any, valuesToFields: MutableMap<Any, St
     fieldsToValues[strId] = el
 }
 
-fun createGraphForSetElement(el: Any, valuesToFields: MutableMap<Any, String>,
-                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+fun createGraphForSetElement(el: Any?, valuesToFields: MutableMap<Any?, String>,
+                             fieldsToValues: MutableMap<String, Any?>, rootNode: Tree?, currentNode: Tree,
                              elNumber: Int) {
     val strId = currentNode.nodeId + "[$elNumber]"
     createGraphForContainerElement(el, valuesToFields, fieldsToValues, rootNode, currentNode, strId)
@@ -238,8 +252,8 @@ fun createGraphForSetElement(el: Any, valuesToFields: MutableMap<Any, String>,
     fieldsToValues[strId] = el
 }
 
-fun createGraphForMapElement(key: Any, value: Any, valuesToFields: MutableMap<Any, String>,
-                             fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree, mapIndex: Int) {
+fun createGraphForMapElement(key: Any?, value: Any?, valuesToFields: MutableMap<Any?, String>,
+                             fieldsToValues: MutableMap<String, Any?>, rootNode: Tree?, currentNode: Tree, mapIndex: Int) {
     val keyId = currentNode.nodeId + "[$mapIndex].key"
     createGraphForContainerElement(key, valuesToFields, fieldsToValues, rootNode, currentNode, keyId)
     valuesToFields[key] = keyId
@@ -250,38 +264,42 @@ fun createGraphForMapElement(key: Any, value: Any, valuesToFields: MutableMap<An
     fieldsToValues[valueId] = value
 }
 
-fun createGraphForContainerElement(el: Any, valuesToFields: MutableMap<Any, String>,
-                                   fieldsToValues: MutableMap<String, Any>, rootNode: Tree?, currentNode: Tree,
+fun createGraphForContainerElement(el: Any?, valuesToFields: MutableMap<Any?, String>,
+                                   fieldsToValues: MutableMap<String, Any?>, rootNode: Tree?, currentNode: Tree,
                                    strId: String): Tree? {
     var result: Tree? = null
-    if (el::class.java.isPrimitive
-        || isNumber(el)
-        || el::class.java.isAssignableFrom(Boolean::class.java)
-        || el::class.java.isAssignableFrom(Char::class.java)
-        || el::class.java.isEnum) {
-        result = currentNode.addChild(TreeInfo(strId), Tree(strId))
-    } else if (el::class.java.isAssignableFrom(String::class.java)) {
-        if (valuesToFields[el] != null) {
-            result = currentNode.addChild(
-                TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
-                rootNode?.getChild(valuesToFields[el]!!)
-                    ?: currentNode.getChild(valuesToFields[el]!!)
-            )
-        } else {
+        if (el == null
+            || el::class.java.isPrimitive
+            || isNumber(el)
+            || el::class.java.isAssignableFrom(Boolean::class.java)
+            || el::class.java.isAssignableFrom(java.lang.Boolean::class.java)
+            || el::class.java.isAssignableFrom(Char::class.java)
+            || el::class.java.isAssignableFrom(Character::class.java)
+            || el::class.java.isEnum
+        ) {
             result = currentNode.addChild(TreeInfo(strId), Tree(strId))
-        }
-    } else {
-        result = currentNode.addChild(
-            TreeInfo(
-                strId,
-                el::class.java.isArray || Collection::class.java.isAssignableFrom(el::class.java)
-            ),
-            createFieldGraph(
-                el, valuesToFields, fieldsToValues,
-                strId, rootNode ?: currentNode
+        } else if (el::class.java.isAssignableFrom(String::class.java)) {
+            if (valuesToFields[el] != null) {
+                result = currentNode.addChild(
+                    TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
+                    rootNode?.getChild(valuesToFields[el]!!)
+                        ?: currentNode.getChild(valuesToFields[el]!!)
+                )
+            } else {
+                result = currentNode.addChild(TreeInfo(strId), Tree(strId))
+            }
+        } else {
+            result = currentNode.addChild(
+                TreeInfo(
+                    strId,
+                    el::class.java.isArray || Collection::class.java.isAssignableFrom(el::class.java)
+                ),
+                createFieldGraph(
+                    el, valuesToFields, fieldsToValues,
+                    strId, rootNode ?: currentNode
+                )
             )
-        )
-    }
+        }
     return result
 }
 
@@ -291,6 +309,8 @@ fun matchType(obj: Any?) = when {
     isNumber(obj)-> obj
     obj::class.java.isAssignableFrom(Boolean::class.java)-> obj
     obj::class.java.isAssignableFrom(Char::class.java)-> obj
+    obj::class.java.isAssignableFrom(java.lang.Boolean::class.java)-> obj
+    obj::class.java.isAssignableFrom(Character::class.java)-> obj
     obj::class.java.isAssignableFrom(String::class.java) -> obj
     obj::class.java.isEnum -> obj
     else -> createBlankInstance(obj)
@@ -298,7 +318,7 @@ fun matchType(obj: Any?) = when {
 
 fun clonePrimitiveWrapper(pr: Any): Any = when (pr) {
     is Boolean -> pr.toString().toBoolean()
-    is Char -> pr.toString().toCharArray()[0]
+    is Char -> pr.toString().toInt().toChar()
     is Int -> pr.toString().toInt()
     is Long -> pr.toString().toLong()
     is Byte -> pr.toString().toByte()
@@ -314,8 +334,8 @@ fun clonePrimitiveWrapper(pr: Any): Any = when (pr) {
 
 /*Should return list of constructor args*/
 /*Rewrite it to search values in hashsets by graph*/
-fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
-                newObjFieldsToValues: MutableMap<String, Any>,rootNode: Tree, currentNode: Tree): Any? {
+fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+                newObjFieldsToValues: MutableMap<String, Any?>,rootNode: Tree, currentNode: Tree): Any? {
     if(obj != null) {
         if (obj::class.java.isPrimitive
             || obj::class.java.isEnum
@@ -323,17 +343,19 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValu
             return obj
         } else if (isNumber(obj)
             || obj::class.java.isAssignableFrom(Boolean::class.java)
-            || obj::class.java.isAssignableFrom(Char::class.java)) {
+            || obj::class.java.isAssignableFrom(Char::class.java)
+            || obj::class.java.isAssignableFrom(java.lang.Boolean::class.java)
+            || obj::class.java.isAssignableFrom(Character::class.java)) {
             return clonePrimitiveWrapper(obj)
         } else if (obj::class.java.isAssignableFrom(String::class.java)) {
-            return String((obj as String).toCharArray())
+            return (obj as String).toCharArray().toString()
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
             return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else {
             for (field in obj::class.java.declaredFields) {
                 field.isAccessible = true
-                var fieldId = currentNode.nodeId + "." + field.name
+                val fieldId = currentNode.nodeId + "." + field.name
                 if (field.type.isPrimitive
                     || isNumber(obj)
                     || field.type.isAssignableFrom(Boolean::class.java)
@@ -491,8 +513,8 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any, String>, fieldsToValu
     return obj
 }
 
-fun cloneMap(obj: Any, valuesToFields: MutableMap<Any, String>, fieldsToValues: MutableMap<String, Any>,
-             newObjFieldsToValues: MutableMap<String, Any>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): Map<*, *>? {
+fun cloneMap(obj: Any, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+             newObjFieldsToValues: MutableMap<String, Any?>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): Map<*, *>? {
     val cycleRef = currentNode.isCycleReference(fieldId)
     var item: Map<*, *>? = null
     val createCollectionClone = {id: String ->
@@ -514,12 +536,12 @@ fun cloneMap(obj: Any, valuesToFields: MutableMap<Any, String>, fieldsToValues: 
             return@map keyClone to valueClone
         }.toMap()
         newObjFieldsToValues[fieldId] = collectionValues
-        field?.let {it.set(obj, collectionValues)}
+        field?.set(obj, collectionValues)
         item = collectionValues
     }
     if (cycleRef != null) {
         if (newObjFieldsToValues[cycleRef.nodeId] != null) {
-            field?.let {it.set(obj, newObjFieldsToValues[cycleRef.nodeId])}
+            field?.set(obj, newObjFieldsToValues[cycleRef.nodeId])
             item = newObjFieldsToValues[cycleRef.nodeId] as Map<*, *>?
         } else {
             createCollectionClone(cycleRef.nodeId)
