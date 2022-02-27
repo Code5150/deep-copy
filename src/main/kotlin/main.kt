@@ -1,9 +1,13 @@
 import sun.reflect.ReflectionFactory
 import java.lang.reflect.Field
 
-data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?) {
+data class Man(private var name: String?, private var age: Int, private var favouriteBooks: List<String>?, var man: Man? = null) {
     override fun toString(): String {
         return name + age
+    }
+
+    override fun hashCode(): Int {
+        return name.hashCode() + age
     }
 }
 data class Man2(private var name: String?, private var age: Float, private var favouriteBooks: List<String>?)
@@ -43,6 +47,10 @@ data class Tree(val nodeId: String,
         }
         return null
     }
+
+    override fun toString(): String {
+        return nodeId
+    }
 }
 
 //deep copy stops on objects, which package name contains this strings,
@@ -59,7 +67,8 @@ fun main(args: Array<String>) {
     val man1 = Man(
         "Vladislav", 22, listOf("Pedagogicheskaya poema")
     )
-    val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
+    man1.man = man1
+    //val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
     val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
     )))
@@ -164,6 +173,11 @@ fun createFieldGraph(
                             rootNode?.getChild(valuesToFields[field.get(obj)]!!)
                                 ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
                         )
+                    } else if (field.get(obj) == obj) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
+                            currentNode
+                        )
                     } else {
                         currentNode.addChild(TreeInfo(strId), Tree(strId))
                         valuesToFields[field.get(obj)] = strId
@@ -177,7 +191,12 @@ fun createFieldGraph(
                             rootNode?.getChild(valuesToFields[field.get(obj)]!!)
                                 ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
                         )
-                    } else {
+                    } else if (field.get(obj) == obj) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
+                            currentNode
+                        )
+                    }else {
                         currentNode.addChild(
                             TreeInfo(strId, true),
                             createFieldGraph(
@@ -197,6 +216,11 @@ fun createFieldGraph(
                             rootNode?.getChild(valuesToFields[field.get(obj)]!!)
                                 ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
                         )
+                    }else if (field.get(obj) == obj) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = true, isCycle = true),
+                            currentNode
+                        )
                     } else {
                         currentNode.addChild(
                             TreeInfo(strId, isArrayOrCollection = true, isCycle = false),
@@ -215,6 +239,11 @@ fun createFieldGraph(
                             TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
                             rootNode?.getChild(valuesToFields[field.get(obj)]!!)
                                 ?: currentNode.getChild(valuesToFields[field.get(obj)]!!)
+                        )
+                    } else if (field.get(obj) == obj) {
+                        currentNode.addChild(
+                            TreeInfo(strId, isArrayOrCollection = false, isCycle = true),
+                            currentNode
                         )
                     } else {
                         currentNode.addChild(
