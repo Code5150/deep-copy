@@ -392,6 +392,9 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
             return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
+        } else if (List::class.java.isAssignableFrom(obj::class.java)) {
+            return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
+                newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else if (obj::class.java.isArray) {
             return cloneArray(
                 obj as Array<*>, valuesToFields, fieldsToValues,
@@ -627,4 +630,33 @@ fun cloneArray(obj: Array<*>, valuesToFields: MutableMap<Any?, String>, fieldsTo
         return createArrayClone(fieldId)
     }
     return obj
+}
+
+fun cloneList(obj: Array<*>, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+              newObjFieldsToValues: MutableMap<String, Any?>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): List<*> {
+    val cycleRef = currentNode.isCycleReference(fieldId)
+    val createCollectionClone: (String) -> List<*> = {id: String ->
+        val collectionValues = (fieldsToValues[id] as List<*>).mapIndexed { index, any ->
+            val myId = "$fieldId[$index]"
+            val clone = matchType(any)
+            return@mapIndexed cloneValues(
+                clone, valuesToFields,
+                fieldsToValues, newObjFieldsToValues,
+                rootNode, currentNode.getChild(myId)!!
+            )
+        }
+        newObjFieldsToValues[fieldId] = collectionValues
+        field?.set(obj, collectionValues)
+        collectionValues
+    }
+    if (cycleRef != null) {
+        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+            field?.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+            return newObjFieldsToValues[cycleRef.nodeId] as List<*>
+        } else {
+            return createCollectionClone(cycleRef.nodeId)
+        }
+    } else {
+        return createCollectionClone(fieldId)
+    }
 }
