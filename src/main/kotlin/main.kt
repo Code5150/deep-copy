@@ -22,8 +22,12 @@ data class Tree(val nodeId: String,
         if (childId == nodeId) {
             result = this
         } else {
-            for (v in children.values) {
-                result = v?.getChild(childId)
+            for ((k, v) in children) {
+                if (!k.isCycle) {
+                    result = v?.getChild(childId)
+                } else if (v?.nodeId == nodeId) {
+                    result = v
+                }
                 if (result != null) break
             }
         }
@@ -527,10 +531,14 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
                         }
                     }
                     if (cycleRef != null) {
-                        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
-                            field.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+                        if (cycleRef == currentNode) {
+                            field.set(obj, obj)
                         } else {
-                            createObjClone(cycleRef.nodeId)
+                            if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+                                field.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+                            } else {
+                                createObjClone(cycleRef.nodeId)
+                            }
                         }
                     } else {
                         createObjClone(fieldId)
