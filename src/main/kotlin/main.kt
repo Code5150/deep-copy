@@ -59,8 +59,8 @@ fun main(args: Array<String>) {
     val man1 = Man(
         "Vladislav", 22, listOf("Pedagogicheskaya poema")
     )
-    val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
-    val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
+    //val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
+    val newMap2 = deepCopy(mapOf('V' to man1, 'S' to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
     )))
     println("Hello World!")
@@ -318,7 +318,7 @@ fun matchType(obj: Any?) = when {
 
 fun clonePrimitiveWrapper(pr: Any): Any = when (pr) {
     is Boolean -> pr.toString().toBoolean()
-    is Char -> pr.toString().toInt().toChar()
+    is Char -> pr.toString()[0]
     is Int -> pr.toString().toInt()
     is Long -> pr.toString().toLong()
     is Byte -> pr.toString().toByte()
@@ -348,7 +348,7 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
             || obj::class.java.isAssignableFrom(Character::class.java)) {
             return clonePrimitiveWrapper(obj)
         } else if (obj::class.java.isAssignableFrom(String::class.java)) {
-            return (obj as String).toCharArray().toString()
+            return String((obj as String).toCharArray())
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
             return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
