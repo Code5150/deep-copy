@@ -68,22 +68,29 @@ fun main(args: Array<String>) {
                 "Vladislav", 22, listOf("Pedagogicheskaya poema")
             )
     ))*/
-    val man1 = Man(
+    /*val man1 = Man(
         "Vladislav", 22, listOf("Pedagogicheskaya poema")
     )
     man1.man = man1
     //val newMap = deepCopy(mapOf(987L to true, 111150 to false, 884636 to null))
     val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
-    )))
+    )))*/
+    val newArray = deepCopy(arrayOf("SERBIA", "CROATIA"))
     println("Hello World!")
 }
 
 fun createBlankInstance(obj: Any): Any {
-    val rf = ReflectionFactory.getReflectionFactory()
-    val constructor = rf.newConstructorForSerialization(obj::class.java,
-        Any::class.java.getDeclaredConstructor())
-    return obj::class.java.cast(constructor.newInstance())
+    if (obj::class.java.isArray) {
+        return java.lang.reflect.Array.newInstance(obj::class.java, (obj as Array<*>).size)
+    } else {
+        val rf = ReflectionFactory.getReflectionFactory()
+        val constructor = rf.newConstructorForSerialization(
+            obj::class.java,
+            Any::class.java.getDeclaredConstructor()
+        )
+        return obj::class.java.cast(constructor.newInstance())
+    }
 }
 
 fun deepCopy(obj: Any?): Any? {
@@ -351,7 +358,7 @@ fun matchType(obj: Any?) = when {
 
 fun clonePrimitiveWrapper(pr: Any): Any = when (pr) {
     is Boolean -> pr.toString().toBoolean()
-    is Char -> pr.toString().toInt().toChar()
+    is Char -> pr.toString()[0]
     is Int -> pr.toString().toInt()
     is Long -> pr.toString().toLong()
     is Byte -> pr.toString().toByte()
@@ -381,9 +388,13 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
             || obj::class.java.isAssignableFrom(Character::class.java)) {
             return clonePrimitiveWrapper(obj)
         } else if (obj::class.java.isAssignableFrom(String::class.java)) {
-            return (obj as String).toCharArray().toString()
+            return String((obj as String).toCharArray())
         } else if (Map::class.java.isAssignableFrom(obj::class.java)) {
             return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
+                newObjFieldsToValues, rootNode, currentNode, "root", null)
+        } else if (obj::class.java.isArray) {
+            return cloneArray(
+                obj as Array<*>, valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else {
             for (field in obj::class.java.declaredFields) {
@@ -587,4 +598,33 @@ fun cloneMap(obj: Any, valuesToFields: MutableMap<Any?, String>, fieldsToValues:
         createCollectionClone(fieldId)
     }
     return item
+}
+
+fun cloneArray(obj: Array<*>, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+               newObjFieldsToValues: MutableMap<String, Any?>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): Array<*> {
+    val cycleRef = currentNode.isCycleReference(fieldId)
+    val createArrayClone: (String) -> Array<*> = {id ->
+        val collectionValues = (fieldsToValues[id] as Array<*>).mapIndexed { index, any ->
+            val myId = "$fieldId[$index]"
+            val clone = matchType(any)
+            return@mapIndexed cloneValues(
+                clone, valuesToFields,
+                fieldsToValues, newObjFieldsToValues,
+                rootNode, currentNode.getChild(myId)!!)
+
+        }.toTypedArray()
+        newObjFieldsToValues[fieldId] = collectionValues
+        field?.set(obj, collectionValues)
+        collectionValues
+    }
+    if (cycleRef != null) {
+        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+            field?.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+        } else {
+            return createArrayClone(cycleRef.nodeId)
+        }
+    } else {
+        return createArrayClone(fieldId)
+    }
+    return obj
 }
