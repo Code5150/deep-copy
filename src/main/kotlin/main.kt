@@ -76,7 +76,7 @@ fun main(args: Array<String>) {
     val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
     )))*/
-    val newArray = deepCopy(arrayOf("SERBIA", "CROATIA"))
+    val newArray = deepCopy(listOf("SERBIA", "CROATIA"))
     println("Hello World!")
 }
 
@@ -393,7 +393,7 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
             return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else if (List::class.java.isAssignableFrom(obj::class.java)) {
-            return cloneMap(createBlankInstance(obj), valuesToFields, fieldsToValues,
+            return cloneList(createBlankInstance(obj) as List<*>, valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else if (obj::class.java.isArray) {
             return cloneArray(
@@ -632,7 +632,7 @@ fun cloneArray(obj: Array<*>, valuesToFields: MutableMap<Any?, String>, fieldsTo
     return obj
 }
 
-fun cloneList(obj: Array<*>, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+fun cloneList(obj: List<*>, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
               newObjFieldsToValues: MutableMap<String, Any?>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): List<*> {
     val cycleRef = currentNode.isCycleReference(fieldId)
     val createCollectionClone: (String) -> List<*> = {id: String ->
