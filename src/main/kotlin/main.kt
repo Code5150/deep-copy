@@ -76,7 +76,7 @@ fun main(args: Array<String>) {
     val newMap2 = deepCopy(mapOf("V" to man1, "S" to Man(
         "Sergey", 23, listOf("Kak zakalyalas stal")
     )))*/
-    val newArray = deepCopy(listOf("SERBIA", "CROATIA"))
+    val newArray = deepCopy(setOf("SERBIA", "CROATIA"))
     println("Hello World!")
 }
 
@@ -395,6 +395,9 @@ fun cloneValues(obj: Any?, valuesToFields: MutableMap<Any?, String>, fieldsToVal
         } else if (List::class.java.isAssignableFrom(obj::class.java)) {
             return cloneList(createBlankInstance(obj) as List<*>, valuesToFields, fieldsToValues,
                 newObjFieldsToValues, rootNode, currentNode, "root", null)
+        } else if (Set::class.java.isAssignableFrom(obj::class.java)) {
+            return cloneSet(createBlankInstance(obj) as Set<*>, valuesToFields, fieldsToValues,
+                newObjFieldsToValues, rootNode, currentNode, "root", null)
         } else if (obj::class.java.isArray) {
             return cloneArray(
                 obj as Array<*>, valuesToFields, fieldsToValues,
@@ -653,6 +656,35 @@ fun cloneList(obj: List<*>, valuesToFields: MutableMap<Any?, String>, fieldsToVa
         if (newObjFieldsToValues[cycleRef.nodeId] != null) {
             field?.set(obj, newObjFieldsToValues[cycleRef.nodeId])
             return newObjFieldsToValues[cycleRef.nodeId] as List<*>
+        } else {
+            return createCollectionClone(cycleRef.nodeId)
+        }
+    } else {
+        return createCollectionClone(fieldId)
+    }
+}
+
+fun cloneSet(obj: Set<*>, valuesToFields: MutableMap<Any?, String>, fieldsToValues: MutableMap<String, Any?>,
+              newObjFieldsToValues: MutableMap<String, Any?>, rootNode: Tree, currentNode: Tree, fieldId: String, field: Field?): Set<*> {
+    val cycleRef = currentNode.isCycleReference(fieldId)
+    val createCollectionClone: (String) -> Set<*> = {id: String ->
+        val collectionValues = (fieldsToValues[id] as Set<*>).mapIndexed { index, any ->
+            val myId = "$fieldId[$index]"
+            val clone = matchType(any)
+            return@mapIndexed cloneValues(
+                clone, valuesToFields,
+                fieldsToValues, newObjFieldsToValues,
+                rootNode, currentNode.getChild(myId)!!
+            )
+        }
+        newObjFieldsToValues[fieldId] = collectionValues
+        field?.set(obj, collectionValues)
+        collectionValues.toSet()
+    }
+    if (cycleRef != null) {
+        if (newObjFieldsToValues[cycleRef.nodeId] != null) {
+            field?.set(obj, newObjFieldsToValues[cycleRef.nodeId])
+            return newObjFieldsToValues[cycleRef.nodeId] as Set<*>
         } else {
             return createCollectionClone(cycleRef.nodeId)
         }
